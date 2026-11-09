@@ -37,6 +37,19 @@ npx vitest run -t "見出し"    # テスト名で絞り込んで実行
 - レイアウトやページの props 型には、Next が生成するグローバル型（例: `LayoutProps<"/">`）を使っています。
 - Tailwind CSS v4 は PostCSS ではなく、`next.config.ts` の `turbopack.rules` で `@tailwindcss/turbopack` ローダーを通して読み込んでいます。テーマトークンは `src/app/globals.css` の `@theme inline` で定義しています。
 
+## Supabase
+
+- `@supabase/ssr` と `@supabase/supabase-js` を使っています。
+- 環境変数のキー名は `.env.example` に合わせて `NEXT_PUBLIC_SUPABASE_URL` と `NEXT_PUBLIC_SUPABASE_PUBLISHABLE` です。公式ドキュメントにある `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` や `NEXT_PUBLIC_SUPABASE_ANON_KEY` ではありません。実際の値は `.env.local` に書きます（Git 管理外）。
+- クライアントは用途に応じて使い分けます。
+  - Server Component / Server Action / Route Handler: `@/lib/supabase/server` の `createClient()`（async。`cookies()` を使います）
+  - Client Component: `@/lib/supabase/client` の `createClient()`
+- サーバー側で環境変数を読むときは `@/lib/supabase/env` の `getSupabaseEnv()` を使います。未設定の場合は例外を投げます。
+- `src/instrumentation.ts` がサーバー起動時に `checkSupabaseConnection()`（`@/lib/supabase/checkConnection`）を実行し、接続に失敗したときだけ `console.error` でログを出します。成功時は何も出力しません。
+- 接続確認には Auth のヘルスチェックエンドポイント（`/auth/v1/health`）を使っており、テーブルに依存しません。
+- テーブル構造などプロジェクトの情報は Supabase MCP で確認してください。
+- テストでは Supabase への通信を外部依存としてモックします。環境変数は `vi.stubEnv`、`fetch` は `vi.stubGlobal` で差し替え、`afterEach` で元に戻します（例: `src/__tests__/checkConnection.test.ts`）。
+
 ## テスト
 
 - Vitest + React Testing Library + jsdom を使っています。設定は `vitest.config.mts` です。
