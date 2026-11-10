@@ -37,12 +37,156 @@ npx vitest run -t "見出し"    # テスト名で絞り込んで実行
 - レイアウトやページの props 型には、Next が生成するグローバル型（例: `LayoutProps<"/">`）を使っています。
 - Tailwind CSS v4 は PostCSS ではなく、`next.config.ts` の `turbopack.rules` で `@tailwindcss/turbopack` ローダーを通して読み込んでいます。テーマトークンは `src/app/globals.css` の `@theme inline` で定義しています。
 
+## shadcn/ui
+
+- 設定は `components.json` にあります。スタイルは `base-nova`、色は `neutral` で、CSS 変数でテーマを指定します。
+- 部品の土台は Radix UI ではなく **Base UI**（`@base-ui/react`）です。Radix 版の例をそのまま使わないでください。たとえば別の要素として描画するときは、`asChild` ではなく `render` prop を使います。書く前に Context7 MCP で Base UI 版のドキュメントを確認してください。
+- 部品は `npx shadcn@latest add <name>` で `src/components/ui/` に追加します。手で一から書かないでください。追加した部品は自由に編集できます。
+- クラス名の結合には `cn()` を使います。アプリのコードでは `@/lib/utils` から import します（中身は `cn` パッケージの再エクスポートです）。
+- アイコンは `lucide-react` を使います。
+- テーマの色や角丸は `src/app/globals.css` の `:root` と `.dark` にある CSS 変数で定義し、`@theme inline` で Tailwind のトークン（`bg-primary` や `text-muted-foreground` など）に対応させています。色を変えるときは、個別のクラスではなく CSS 変数を変えてください。
+- ダークモードは `<html>` に `.dark` クラスを付けたときだけ有効になります。OS の設定に合わせて自動では切り替わりません。今は `.dark` を付ける仕組みがありません。
+- フォントは `layout.tsx` の Geist（`--font-geist-sans`）を `@theme inline` の `--font-sans` に割り当てています。`shadcn init` や `--reinstall` を実行すると `--font-sans: var(--font-sans)` という自己参照に書き換えられることがあるので、実行後は確認してください。
+- PostCSS の設定は追加しないでください。Tailwind は turbopack のローダーで処理しています。
+- 画面（`src/app/_components/`）は shadcn の部品で組んでいます。見た目を変えるときは、テストが参照しているロール・アクセシブルな名前・`aria-*` 属性が変わらないようにしてください。
+- ステータスの選択には Base UI の `Select` ではなく `NativeSelect`（ネイティブの `<select>`）を使っています。テストが `selectOptions` で操作しているためです。
+- ステータスごとのアクセント色は `globals.css` の `--status-todo` / `--status-in-progress` / `--status-done` で定義し、クラスの対応は `src/app/_components/statusStyles.ts` にまとめています。
+
+## Supabase
+
+- `@supabase/ssr` と `@supabase/supabase-js` を使っています。
+- 環境変数のキー名は `.env.example` に合わせて `NEXT_PUBLIC_SUPABASE_URL` と `NEXT_PUBLIC_SUPABASE_PUBLISHABLE` です。公式ドキュメントにある `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` や `NEXT_PUBLIC_SUPABASE_ANON_KEY` ではありません。実際の値は `.env.local` に書きます（Git 管理外）。
+- クライアントは用途に応じて使い分けます。
+  - Server Component / Server Action / Route Handler: `@/lib/supabase/server` の `createClient()`（async。`cookies()` を使います）
+  - Client Component: `@/lib/supabase/client` の `createClient()`
+- サーバー側で環境変数を読むときは `@/lib/supabase/env` の `getSupabaseEnv()` を使います。未設定の場合は例外を投げます。
+- `src/instrumentation.ts` がサーバー起動時に `checkSupabaseConnection()`（`@/lib/supabase/checkConnection`）を実行し、接続に失敗したときだけ `console.error` でログを出します。成功時は何も出力しません。
+- 接続確認には Auth のヘルスチェックエンドポイント（`/auth/v1/health`）を使っており、テーブルに依存しません。
+- テーブル構造などプロジェクトの情報は Supabase MCP で確認してください。
+- テストでは Supabase への通信を外部依存としてモックします。環境変数は `vi.stubEnv`、`fetch` は `vi.stubGlobal` で差し替え、`afterEach` で元に戻します（例: `src/__tests__/checkConnection.test.ts`）。
+- スキーマの変更は Supabase MCP の `apply_migration` で行います。変更後は `get_advisors` で警告を確認し、`generate_typescript_types` で `src/lib/supabase/database.types.ts` を再生成してください（手で編集しません）。
+
+### tasks テーブル
+
+- 列: `id`(uuid) / `title`(1〜100文字、空白のみは不可) / `description`(1000文字以内、既定値は空文字) / `status`(`todo` / `in_progress` / `done`) / `created_at` / `updated_at`（トリガーで自動更新）。
+- 認証はありません。RLS は有効で、anon と authenticated に全操作を許可するポリシーを設定しています。ログイン機能を追加する場合はポリシーの見直しが必要です。
+- 文字数とステータスの制約は DB の check 制約と `src/lib/tasks/validation.ts` の両方にあります。片方を変えるときはもう片方も合わせてください。
+- `status` は Postgres の enum ではなく、text 型に check 制約を付けています。そのため生成される型では `string` になります。アプリでは `isTaskStatus()` と `toTask()` で `TaskStatus` 型に絞り込んで使います。
+- DB の列名は snake_case、アプリの型（`Task` など）は camelCase です。両者の変換は `toTask()` で行います。DB の行の型をそのままコンポーネントに渡さないでください。
+
+## タスク機能の構成
+
+- `src/lib/tasks/types.ts`: `Task` 型、`TASK_STATUSES`（列の定義と表示名）、`ActionResult`、DB の行を変換する `toTask()`
+- `src/lib/tasks/validation.ts`: `validateTaskInput()`。クライアント（フォーム）とサーバー（Server Actions）の両方で使います。
+- `src/app/actions.ts`: Server Actions（`createTask` / `updateTask` / `deleteTask`）。入力を再検証してから書き込み、成功したら `refresh()`（`next/cache`）を呼びます。例外は投げず、`{ ok, data }` か `{ ok: false, error }` を返します。
+- `src/app/page.tsx`: 同期コンポーネントです。DB からの読み込みは async の `TaskBoardLoader` で行い、`<Suspense>` で囲んでいます（Cache Components では cookies を使う処理に Suspense が必要です）。
+- `src/app/_components/TaskBoard.tsx`: カンバン本体（Client Component）。`useOptimistic` で操作結果をすぐ表示し、成功したら内部の状態を確定、失敗したら表示を元に戻してエラーを出します。`refresh()` で届いた新しい `initialTasks` は内部の状態に反映します。
+- 編集は shadcn の `Dialog`（`role="dialog"`）、削除確認は `AlertDialog`（`role="alertdialog"`、キャンセルに初期フォーカス）で表示します。どちらも Esc キーで閉じます。閉じるアニメーション中も内容を表示できるよう、`TaskBoard` は最後に開いた対象（`lastEditingTask` / `lastDeletingTask`）を保持しています。
+- `TaskForm` は追加と編集で共通です。`task` を渡すと編集モードになり、ステータスのセレクトが表示されます。入力欄は非制御（`defaultValue`）で、送信時に `validateTaskInput()` で検証します。
+- 列の並び順と表示名は `TASK_STATUSES` の定義順で決まります。
+
+### よくある変更の手順
+
+**tasks テーブルに列を追加・変更するとき**
+1. Supabase MCP の `apply_migration` でスキーマを変更し、`get_advisors`（security / performance）で警告を確認します。
+2. `generate_typescript_types` で `database.types.ts` を再生成します。
+3. `types.ts`（`Task`、`toTask()`）と `validation.ts` を更新します。
+4. `TaskBoardLoader` の `select()` は列を明示しているので、必要な列を追加します。
+5. `actions.ts`、フォーム、カード、テストを更新します。
+
+**ステータスを追加・変更するとき**
+- DB の check 制約、`TASK_STATUSES`、関連するテストをまとめて変更してください。
+
+**新しい操作（Server Action）を追加するとき**
+- `src/app/actions.ts` に追加します。サーバー側でも入力を検証し、`ActionResult<T>` を返して例外は投げません。成功したら `refresh()` を呼びます。
+- エラーメッセージは日本語でユーザー向けに書きます。DB のエラー内容はそのまま返さないでください。
+- 画面側では `TaskBoard` の `mutate()` を使います。楽観的に表示する変更と、成功後に確定する変更を `TaskChange` で渡します。
+
+## UI の規約
+
+- 画面の文言は日本語です（ステータスの表示名 `Todo` / `In Progress` / `Done` だけは英語）。
+- テストはロールとアクセシブルな名前で要素を探しています。文言、`aria-label`（例: `「タイトル」を編集`）、見出し、ラベルを変えるときはテストも合わせて更新してください。
+- 各列は `aria-labelledby` で列名を付けた `section`（ロールは region）です。件数は名前に含めていません。
+- エラーメッセージは `role="alert"` で表示します。
+- `src/app/_components/` はルートにならないプライベートフォルダです。ページ専用のコンポーネントはここに置きます。
+
+## デザインルール
+
+shadcn/ui（neutral）を土台に、白とグレーを基調にした落ち着いた見た目にしています。色を付けるのはステータスと破壊的な操作だけです。
+
+### 色
+- 色はテーマのトークン（`bg-card`、`bg-muted`、`text-muted-foreground`、`border`、`text-destructive` など）だけを使います。`zinc-*`、`red-*`、`blue-*` など Tailwind の色を直接書かないでください。
+- ステータスの色は `src/app/_components/statusStyles.ts` の `STATUS_STYLES` 経由で使います（`dot` は丸印、`accent` はカード左端の帯）。ステータスを追加するときは、`globals.css` の `:root` と `.dark` の `--status-*`、`@theme inline` の `--color-status-*`、`STATUS_STYLES` をまとめて追加します。
+- Tailwind はクラス名を文字列のまま検出します。`` `bg-status-${status}` `` のように組み立てず、完全なクラス名を書いてください。
+- 赤（destructive）はエラーと削除にだけ使います。
+
+### レイアウトと余白
+- ページの背景は `bg-muted/30`、ヘッダーは `border-b bg-background` です。中身は `mx-auto max-w-6xl px-4` で横幅をそろえます。
+- 大きなブロック同士の間隔は `gap-6`、列同士は `gap-4`、カード同士は `gap-2` です。
+- 角丸は外側ほど大きくします。列パネルは `rounded-xl`、タスクカードと空表示は `rounded-lg` です。
+- 立体感は控えめにします。カードは `shadow-xs` で、マウスを乗せたときだけ `shadow-md` にします。
+- スマホ幅を基準に組み、`md:` 以上で 3 列や横並びにします。
+
+### 部品の使い分け
+| 用途 | 使う部品 |
+| --- | --- |
+| 入力フォームなどのまとまり | `Card`（`CardHeader` / `CardTitle` / `CardContent`） |
+| 画面全体に関わるエラー | `Alert variant="destructive"` と `CircleAlertIcon`（`className="border-destructive/30 bg-destructive/5"`） |
+| 入力欄のエラー | 入力欄に `aria-invalid`、下に `text-sm text-destructive` の文言（`role="alert"`） |
+| 件数などの小さな数値 | `Badge variant="secondary"`（数字の幅をそろえる `tabular-nums`） |
+| 編集などの入力を伴う画面 | `Dialog` |
+| 削除など取り消せない操作の確認 | `AlertDialog`（キャンセルに初期フォーカス、アイコンは `AlertDialogMedia`） |
+| 読み込み中 | `Skeleton`。「読み込み中...」は `sr-only` で残す |
+| 空の状態 | 破線の枠（`border border-dashed`）とアイコンと短い文言 |
+| 選択欄 | `NativeSelect`（Base UI の `Select` は使わない） |
+
+### ボタン
+- 主な操作（追加・保存）は `variant="default"` `size="lg"`、キャンセルは `variant="outline"` `size="lg"` です。並べるときは右側に主な操作を置きます。
+- カード内の操作はアイコンだけのボタン（`variant="ghost"` `size="icon-sm"`）にし、`aria-label`（例: `「タイトル」を編集`）と、マウスを乗せたときに出る `title` を付けます。
+- カード内の操作ボタンは、`md:` 以上ではマウスを乗せたときかフォーカスしたとき（`group-hover` / `group-focus-within`）だけ表示し、スマホでは常に表示します。
+- 削除を確定するボタンだけは赤の塗りつぶし（`bg-destructive text-white`）にします。カードの削除アイコンは、マウスを乗せたときだけ赤くします。
+
+### 文字
+- ページの見出し（h1）は `text-lg font-semibold`、列の見出しは `text-sm font-semibold`、補足や説明文は `text-sm text-muted-foreground` です。
+- 長いタイトルや説明ではみ出さないよう、`break-words` を付けます（説明文には `whitespace-pre-wrap` も付けて改行を残します）。
+
+### アイコン
+- `lucide-react` から `PencilIcon` のように `Icon` が付いた名前で import します。
+- 飾りのアイコンには `aria-hidden="true"` を付けます。ボタンの文字の前に置くときは `data-icon="inline-start"` を付けます（余白が調整されます）。
+
+### shadcn の部品を追加・編集するとき
+- 追加した部品に英語の文言が入っていたら日本語にします（例: `dialog.tsx` の閉じるボタンは「閉じる」に変更済み）。
+- 部品ごとの見た目の調整は、使う側で `className` を渡して行います。全体の雰囲気を変えたいときだけ `src/components/ui/` を編集します。
+
+### 見た目の確認
+- デザインを変えたら、Playwright MCP で PC 幅（1280px）とスマホ幅（390px）のスクリーンショットを撮って確認します。ダイアログを開いた状態、エラー表示、空の列も確認してください。
+- スクリーンショットは `.playwright-mcp/` に保存します。このフォルダはコミットしないでください（`.gitignore` には未登録です）。
+
 ## テスト
 
 - Vitest + React Testing Library + jsdom を使っています。設定は `vitest.config.mts` です。
 - `@/*` のエイリアスは Vite 標準の `resolve.tsconfigPaths: true` で解決しています。`vite-tsconfig-paths` プラグインは非推奨なので使いません。
 - テストは `src/__tests__/` に置いています。
 - 非同期（`async`）の Server Component は Vitest でテストできません。同期コンポーネントだけを単体テストし、非同期のものは E2E テストで確認してください。
+- Client Component のテストでは Server Actions（`@/app/actions`）を外部依存としてモックします。Server Actions 自体のテストでは `@/lib/supabase/server` と `next/cache` をモックします。
+- ユーザー操作は `@testing-library/user-event` で再現します。
+- 解決しない Promise をモックに残さないでください。React は実行中の非同期アクションをまとめて扱うため、後続のテストで楽観的表示が元に戻らなくなります。応答を保留したいときはテストの最後で解決してください（例: `src/__tests__/TaskBoard.test.tsx`）。
+- Vitest の `globals` を有効にしていないため、RTL の自動 cleanup は動きません。複数のテストで `render` するファイルでは、`afterEach` で `cleanup()` と `vi.clearAllMocks()` を呼んでください。
+- 楽観的表示が元に戻ったことを確かめるときは、`waitFor` や `findBy*` で待ってから検証します。
+- Supabase のクエリビルダーは、チェーンしたメソッドが自身を返し、`await` で結果を返す thenable としてモックします（`src/__tests__/actions.test.ts` の `mockSupabase()`）。
+- `page.test.tsx` では、async の `TaskBoardLoader` だけを差し替えてページを描画しています。
+
+## 動作確認
+
+- `npm run build` の結果で `/` が `◐ (Partial Prerender)` になっていることを確認します。静的なシェルと、Suspense 内の動的な部分に分かれているという意味です。
+- 実際の DB での確認には Supabase MCP の `execute_sql` を使います。RLS の確認は、`begin; set local role anon; ...; rollback;` のようにトランザクション内で anon ロールに切り替えて行い、データを残さないようにします。確認用に入れたデータは必ず削除してください。
+- `src/instrumentation.ts` はサーバー起動時にしか実行されません。すでに dev サーバー（ポート 3000）が動いていることがあるので、止めずに別のポート（例: `npx next start -p 3100`）で確認するか、ユーザーに再起動を依頼してください。
+
+## 開発環境の注意
+
+- Windows 環境です。`python` コマンドは Microsoft Store のスタブで、実行しても何もしません。スクリプトが必要なときは Node.js を使ってください。
+- `.env.local` の読み取りは `.claude/settings.json` で禁止しています。値を確認する必要があるときは、ユーザーに確認してください。
+- 作業は `main` ではなく feature ブランチで行います。
 
 ## コーディングルール
 - 変更後は必ず `npm test` でテストが通ることを確認してください
