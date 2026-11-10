@@ -110,6 +110,58 @@ npx vitest run -t "見出し"    # テスト名で絞り込んで実行
 - エラーメッセージは `role="alert"` で表示します。
 - `src/app/_components/` はルートにならないプライベートフォルダです。ページ専用のコンポーネントはここに置きます。
 
+## デザインルール
+
+shadcn/ui（neutral）を土台に、白とグレーを基調にした落ち着いた見た目にしています。色を付けるのはステータスと破壊的な操作だけです。
+
+### 色
+- 色はテーマのトークン（`bg-card`、`bg-muted`、`text-muted-foreground`、`border`、`text-destructive` など）だけを使います。`zinc-*`、`red-*`、`blue-*` など Tailwind の色を直接書かないでください。
+- ステータスの色は `src/app/_components/statusStyles.ts` の `STATUS_STYLES` 経由で使います（`dot` は丸印、`accent` はカード左端の帯）。ステータスを追加するときは、`globals.css` の `:root` と `.dark` の `--status-*`、`@theme inline` の `--color-status-*`、`STATUS_STYLES` をまとめて追加します。
+- Tailwind はクラス名を文字列のまま検出します。`` `bg-status-${status}` `` のように組み立てず、完全なクラス名を書いてください。
+- 赤（destructive）はエラーと削除にだけ使います。
+
+### レイアウトと余白
+- ページの背景は `bg-muted/30`、ヘッダーは `border-b bg-background` です。中身は `mx-auto max-w-6xl px-4` で横幅をそろえます。
+- 大きなブロック同士の間隔は `gap-6`、列同士は `gap-4`、カード同士は `gap-2` です。
+- 角丸は外側ほど大きくします。列パネルは `rounded-xl`、タスクカードと空表示は `rounded-lg` です。
+- 立体感は控えめにします。カードは `shadow-xs` で、マウスを乗せたときだけ `shadow-md` にします。
+- スマホ幅を基準に組み、`md:` 以上で 3 列や横並びにします。
+
+### 部品の使い分け
+| 用途 | 使う部品 |
+| --- | --- |
+| 入力フォームなどのまとまり | `Card`（`CardHeader` / `CardTitle` / `CardContent`） |
+| 画面全体に関わるエラー | `Alert variant="destructive"` と `CircleAlertIcon`（`className="border-destructive/30 bg-destructive/5"`） |
+| 入力欄のエラー | 入力欄に `aria-invalid`、下に `text-sm text-destructive` の文言（`role="alert"`） |
+| 件数などの小さな数値 | `Badge variant="secondary"`（数字の幅をそろえる `tabular-nums`） |
+| 編集などの入力を伴う画面 | `Dialog` |
+| 削除など取り消せない操作の確認 | `AlertDialog`（キャンセルに初期フォーカス、アイコンは `AlertDialogMedia`） |
+| 読み込み中 | `Skeleton`。「読み込み中...」は `sr-only` で残す |
+| 空の状態 | 破線の枠（`border border-dashed`）とアイコンと短い文言 |
+| 選択欄 | `NativeSelect`（Base UI の `Select` は使わない） |
+
+### ボタン
+- 主な操作（追加・保存）は `variant="default"` `size="lg"`、キャンセルは `variant="outline"` `size="lg"` です。並べるときは右側に主な操作を置きます。
+- カード内の操作はアイコンだけのボタン（`variant="ghost"` `size="icon-sm"`）にし、`aria-label`（例: `「タイトル」を編集`）と、マウスを乗せたときに出る `title` を付けます。
+- カード内の操作ボタンは、`md:` 以上ではマウスを乗せたときかフォーカスしたとき（`group-hover` / `group-focus-within`）だけ表示し、スマホでは常に表示します。
+- 削除を確定するボタンだけは赤の塗りつぶし（`bg-destructive text-white`）にします。カードの削除アイコンは、マウスを乗せたときだけ赤くします。
+
+### 文字
+- ページの見出し（h1）は `text-lg font-semibold`、列の見出しは `text-sm font-semibold`、補足や説明文は `text-sm text-muted-foreground` です。
+- 長いタイトルや説明ではみ出さないよう、`break-words` を付けます（説明文には `whitespace-pre-wrap` も付けて改行を残します）。
+
+### アイコン
+- `lucide-react` から `PencilIcon` のように `Icon` が付いた名前で import します。
+- 飾りのアイコンには `aria-hidden="true"` を付けます。ボタンの文字の前に置くときは `data-icon="inline-start"` を付けます（余白が調整されます）。
+
+### shadcn の部品を追加・編集するとき
+- 追加した部品に英語の文言が入っていたら日本語にします（例: `dialog.tsx` の閉じるボタンは「閉じる」に変更済み）。
+- 部品ごとの見た目の調整は、使う側で `className` を渡して行います。全体の雰囲気を変えたいときだけ `src/components/ui/` を編集します。
+
+### 見た目の確認
+- デザインを変えたら、Playwright MCP で PC 幅（1280px）とスマホ幅（390px）のスクリーンショットを撮って確認します。ダイアログを開いた状態、エラー表示、空の列も確認してください。
+- スクリーンショットは `.playwright-mcp/` に保存します。このフォルダはコミットしないでください（`.gitignore` には未登録です）。
+
 ## テスト
 
 - Vitest + React Testing Library + jsdom を使っています。設定は `vitest.config.mts` です。
