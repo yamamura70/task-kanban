@@ -1,4 +1,8 @@
+import { PencilIcon, Trash2Icon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import type { Task } from '@/lib/tasks/types'
+import { cn } from '@/lib/utils'
+import { STATUS_STYLES } from './statusStyles'
 
 type TaskCardProps = {
   task: Task
@@ -8,31 +12,42 @@ type TaskCardProps = {
 
 export function TaskCard({ task, onEdit, onDelete }: TaskCardProps) {
   return (
-    <li className="rounded-md border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-      <h3 className="font-medium break-words">{task.title}</h3>
+    <li
+      className={cn(
+        'group/card relative overflow-hidden rounded-lg border bg-card py-3 pr-2 pl-4 text-card-foreground shadow-xs transition-shadow hover:shadow-md',
+        'before:absolute before:inset-y-0 before:left-0 before:w-1',
+        STATUS_STYLES[task.status].accent,
+      )}
+    >
+      <div className="flex items-start gap-2">
+        <h3 className="min-w-0 flex-1 pt-0.5 font-medium break-words">{task.title}</h3>
+        <div className="flex shrink-0 gap-0.5 opacity-100 transition-opacity md:opacity-0 md:group-focus-within/card:opacity-100 md:group-hover/card:opacity-100">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`「${task.title}」を編集`}
+            title="編集"
+            onClick={() => onEdit(task)}
+          >
+            <PencilIcon />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`「${task.title}」を削除`}
+            title="削除"
+            onClick={() => onDelete(task)}
+            className="hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2Icon />
+          </Button>
+        </div>
+      </div>
       {task.description && (
-        <p className="mt-1 text-sm whitespace-pre-wrap break-words text-zinc-600 dark:text-zinc-400">
+        <p className="mt-1 pr-2 text-sm whitespace-pre-wrap break-words text-muted-foreground">
           {task.description}
         </p>
       )}
-      <div className="mt-3 flex justify-end gap-2 text-sm">
-        <button
-          type="button"
-          aria-label={`「${task.title}」を編集`}
-          onClick={() => onEdit(task)}
-          className="rounded px-2 py-1 text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-zinc-800"
-        >
-          編集
-        </button>
-        <button
-          type="button"
-          aria-label={`「${task.title}」を削除`}
-          onClick={() => onDelete(task)}
-          className="rounded px-2 py-1 text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-zinc-800"
-        >
-          削除
-        </button>
-      </div>
     </li>
   )
 }

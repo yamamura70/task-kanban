@@ -1,7 +1,14 @@
 'use client'
 
 import { useId, useState, type FormEvent } from 'react'
+import { PlusIcon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { Textarea } from '@/components/ui/textarea'
 import { TASK_STATUSES, type Task, type ValidTaskInput } from '@/lib/tasks/types'
+import { cn } from '@/lib/utils'
 import {
   DESCRIPTION_MAX_LENGTH,
   TITLE_MAX_LENGTH,
@@ -20,6 +27,8 @@ type TaskFormProps = {
 export function TaskForm({ task, submitLabel, onSubmit, onCancel }: TaskFormProps) {
   const id = useId()
   const [error, setError] = useState<string | null>(null)
+  const isEdit = Boolean(task)
+  const errorId = `${id}-error`
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -39,78 +48,69 @@ export function TaskForm({ task, submitLabel, onSubmit, onCancel }: TaskFormProp
     if (!task) form.reset()
   }
 
-  const inputClass =
-    'w-full rounded border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950'
-
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <label htmlFor={`${id}-title`} className="text-sm font-medium">
-          タイトル
-        </label>
-        <input
-          id={`${id}-title`}
-          name="title"
-          defaultValue={task?.title}
-          maxLength={TITLE_MAX_LENGTH}
-          required
-          autoFocus={Boolean(task)}
-          className={inputClass}
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label htmlFor={`${id}-description`} className="text-sm font-medium">
-          説明
-        </label>
-        <textarea
-          id={`${id}-description`}
-          name="description"
-          defaultValue={task?.description}
-          maxLength={DESCRIPTION_MAX_LENGTH}
-          rows={task ? 4 : 2}
-          className={inputClass}
-        />
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <div className={cn('grid gap-4', !isEdit && 'md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]')}>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`${id}-title`}>タイトル</Label>
+          <Input
+            id={`${id}-title`}
+            name="title"
+            defaultValue={task?.title}
+            maxLength={TITLE_MAX_LENGTH}
+            required
+            autoFocus={isEdit}
+            placeholder="例: 企画書を仕上げる"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
+            className="h-9"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`${id}-description`}>説明</Label>
+          <Textarea
+            id={`${id}-description`}
+            name="description"
+            defaultValue={task?.description}
+            maxLength={DESCRIPTION_MAX_LENGTH}
+            rows={isEdit ? 4 : 1}
+            placeholder="詳細やメモ（任意）"
+            className={cn(!isEdit && 'min-h-9')}
+          />
+        </div>
       </div>
       {task && (
-        <div className="flex flex-col gap-1">
-          <label htmlFor={`${id}-status`} className="text-sm font-medium">
-            ステータス
-          </label>
-          <select
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`${id}-status`}>ステータス</Label>
+          <NativeSelect
             id={`${id}-status`}
             name="status"
             defaultValue={task.status}
-            className={inputClass}
+            className="w-full"
           >
             {TASK_STATUSES.map((status) => (
-              <option key={status.value} value={status.value}>
+              <NativeSelectOption key={status.value} value={status.value}>
                 {status.label}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </div>
       )}
-      {error && (
-        <p role="alert" className="text-sm text-red-600">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
+        <p id={errorId} role={error ? 'alert' : undefined} className="flex-1 text-sm text-destructive">
           {error}
         </p>
-      )}
-      <div className="flex justify-end gap-2">
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded border border-zinc-300 px-4 py-2 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
-          >
-            キャンセル
-          </button>
-        )}
-        <button
-          type="submit"
-          className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-        >
-          {submitLabel}
-        </button>
+        <div className="flex justify-end gap-2">
+          {onCancel && (
+            <Button type="button" variant="outline" size="lg" onClick={onCancel}>
+              キャンセル
+            </Button>
+          )}
+          <Button type="submit" size="lg" className="px-4">
+            {!isEdit && <PlusIcon data-icon="inline-start" />}
+            {submitLabel}
+          </Button>
+        </div>
       </div>
     </form>
   )

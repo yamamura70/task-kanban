@@ -1,3 +1,5 @@
+import { CircleAlertIcon } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { createClient } from '@/lib/supabase/server'
 import { toTask } from '@/lib/tasks/types'
 import { TaskBoard } from './TaskBoard'
@@ -12,9 +14,12 @@ export async function TaskBoardLoader() {
 
   if (error) {
     return (
-      <p role="alert" className="text-red-600">
-        タスクの読み込みに失敗しました。時間をおいて再読み込みしてください。
-      </p>
+      <Alert variant="destructive" className="border-destructive/30 bg-destructive/5">
+        <CircleAlertIcon aria-hidden="true" />
+        <AlertDescription>
+          タスクの読み込みに失敗しました。時間をおいて再読み込みしてください。
+        </AlertDescription>
+      </Alert>
     )
   }
 

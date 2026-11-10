@@ -48,7 +48,9 @@ npx vitest run -t "見出し"    # テスト名で絞り込んで実行
 - ダークモードは `<html>` に `.dark` クラスを付けたときだけ有効になります。OS の設定に合わせて自動では切り替わりません。今は `.dark` を付ける仕組みがありません。
 - フォントは `layout.tsx` の Geist（`--font-geist-sans`）を `@theme inline` の `--font-sans` に割り当てています。`shadcn init` や `--reinstall` を実行すると `--font-sans: var(--font-sans)` という自己参照に書き換えられることがあるので、実行後は確認してください。
 - PostCSS の設定は追加しないでください。Tailwind は turbopack のローダーで処理しています。
-- 既存の画面（`src/app/_components/`）はまだ shadcn の部品に置き換えていません。置き換えるときは、テストが参照しているロール・アクセシブルな名前・`aria-*` 属性が変わらないようにしてください。
+- 画面（`src/app/_components/`）は shadcn の部品で組んでいます。見た目を変えるときは、テストが参照しているロール・アクセシブルな名前・`aria-*` 属性が変わらないようにしてください。
+- ステータスの選択には Base UI の `Select` ではなく `NativeSelect`（ネイティブの `<select>`）を使っています。テストが `selectOptions` で操作しているためです。
+- ステータスごとのアクセント色は `globals.css` の `--status-todo` / `--status-in-progress` / `--status-done` で定義し、クラスの対応は `src/app/_components/statusStyles.ts` にまとめています。
 
 ## Supabase
 
@@ -79,7 +81,7 @@ npx vitest run -t "見出し"    # テスト名で絞り込んで実行
 - `src/app/actions.ts`: Server Actions（`createTask` / `updateTask` / `deleteTask`）。入力を再検証してから書き込み、成功したら `refresh()`（`next/cache`）を呼びます。例外は投げず、`{ ok, data }` か `{ ok: false, error }` を返します。
 - `src/app/page.tsx`: 同期コンポーネントです。DB からの読み込みは async の `TaskBoardLoader` で行い、`<Suspense>` で囲んでいます（Cache Components では cookies を使う処理に Suspense が必要です）。
 - `src/app/_components/TaskBoard.tsx`: カンバン本体（Client Component）。`useOptimistic` で操作結果をすぐ表示し、成功したら内部の状態を確定、失敗したら表示を元に戻してエラーを出します。`refresh()` で届いた新しい `initialTasks` は内部の状態に反映します。
-- 編集は `Modal`（`role="dialog"`）、削除確認は `ConfirmDialog`（`role="alertdialog"`）で表示します。どちらも Esc キーで閉じます。
+- 編集は shadcn の `Dialog`（`role="dialog"`）、削除確認は `AlertDialog`（`role="alertdialog"`、キャンセルに初期フォーカス）で表示します。どちらも Esc キーで閉じます。閉じるアニメーション中も内容を表示できるよう、`TaskBoard` は最後に開いた対象（`lastEditingTask` / `lastDeletingTask`）を保持しています。
 - `TaskForm` は追加と編集で共通です。`task` を渡すと編集モードになり、ステータスのセレクトが表示されます。入力欄は非制御（`defaultValue`）で、送信時に `validateTaskInput()` で検証します。
 - 列の並び順と表示名は `TASK_STATUSES` の定義順で決まります。
 

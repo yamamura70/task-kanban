@@ -1,15 +1,31 @@
 'use client'
 
-import { useCallback, useOptimistic, useState, useTransition } from 'react'
+import { useCallback, useOptimistic, useRef, useState, useTransition } from 'react'
+import { CircleAlertIcon, InboxIcon, PlusCircleIcon, Trash2Icon } from 'lucide-react'
 import { createTask, deleteTask, updateTask } from '@/app/actions'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   TASK_STATUSES,
   type ActionResult,
   type Task,
   type ValidTaskInput,
 } from '@/lib/tasks/types'
-import { ConfirmDialog } from './ConfirmDialog'
-import { Modal } from './Modal'
+import { cn } from '@/lib/utils'
+import { STATUS_STYLES } from './statusStyles'
 import { TaskCard } from './TaskCard'
 import { TaskForm } from './TaskForm'
 
@@ -52,6 +68,13 @@ export function TaskBoard({ initialTasks }: TaskBoardProps) {
   const [error, setError] = useState<string | null>(null)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [deletingTask, setDeletingTask] = useState<Task | null>(null)
+  // 閉じるアニメーションの間も内容を表示し続けるため、最後に開いた対象を保持する
+  const [lastEditingTask, setLastEditingTask] = useState<Task | null>(null)
+  const [lastDeletingTask, setLastDeletingTask] = useState<Task | null>(null)
+  if (editingTask && editingTask !== lastEditingTask) setLastEditingTask(editingTask)
+  if (deletingTask && deletingTask !== lastDeletingTask) setLastDeletingTask(deletingTask)
+  // 誤操作を防ぐため、削除確認ではキャンセルに初期フォーカスを置く
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null)
 
   function mutate<T>(
     optimisticChange: TaskChange,
@@ -108,23 +131,28 @@ export function TaskBoard({ initialTasks }: TaskBoardProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <section
-        aria-label="タスクの追加"
-        className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900"
-      >
-        <TaskForm submitLabel="追加" onSubmit={handleCreate} />
+      <section aria-label="タスクの追加">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <PlusCircleIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+              新しいタスク
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TaskForm submitLabel="追加" onSubmit={handleCreate} />
+          </CardContent>
+        </Card>
       </section>
 
       {error && (
-        <p
-          role="alert"
-          className="rounded border border-red-300 bg-red-50 px-4 py-2 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
-        >
-          {error}
-        </p>
+        <Alert variant="destructive" className="border-destructive/30 bg-destructive/5">
+          <CircleAlertIcon aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid items-start gap-4 md:grid-cols-3">
         {TASK_STATUSES.map((status) => {
           const columnTasks = optimisticTasks.filter((task) => task.status === status.value)
           const headingId = `column-${status.value}`
@@ -132,14 +160,23 @@ export function TaskBoard({ initialTasks }: TaskBoardProps) {
             <section
               key={status.value}
               aria-labelledby={headingId}
-              className="rounded-lg bg-zinc-100 p-3 dark:bg-zinc-800"
+              className="flex flex-col gap-3 rounded-xl border bg-muted/50 p-3"
             >
-              <h2 className="mb-3 font-semibold">
+              <h2 className="flex items-center gap-2 px-1 text-sm font-semibold">
+                <span
+                  aria-hidden="true"
+                  className={cn('size-2 rounded-full', STATUS_STYLES[status.value].dot)}
+                />
                 <span id={headingId}>{status.label}</span>
-                <span className="ml-2 text-sm text-zinc-500">{columnTasks.length}件</span>
+                <Badge variant="secondary" className="ml-auto tabular-nums">
+                  {columnTasks.length}件
+                </Badge>
               </h2>
               {columnTasks.length === 0 ? (
-                <p className="text-sm text-zinc-500">タスクはありません</p>
+                <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center text-muted-foreground">
+                  <InboxIcon className="size-5" aria-hidden="true" />
+                  <p className="text-sm">タスクはありません</p>
+                </div>
               ) : (
                 <ul className="flex flex-col gap-2">
                   {columnTasks.map((task) => (
@@ -157,26 +194,56 @@ export function TaskBoard({ initialTasks }: TaskBoardProps) {
         })}
       </div>
 
-      {editingTask && (
-        <Modal title="タスクを編集" onClose={closeEditDialog}>
-          <TaskForm
-            task={editingTask}
-            submitLabel="保存"
-            onSubmit={(input) => handleUpdate(editingTask, input)}
-            onCancel={closeEditDialog}
-          />
-        </Modal>
-      )}
+      <Dialog
+        open={editingTask !== null}
+        onOpenChange={(open) => {
+          if (!open) closeEditDialog()
+        }}
+      >
+        <DialogContent className="gap-6 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>タスクを編集</DialogTitle>
+          </DialogHeader>
+          {lastEditingTask && (
+            <TaskForm
+              key={lastEditingTask.id}
+              task={lastEditingTask}
+              submitLabel="保存"
+              onSubmit={(input) => handleUpdate(lastEditingTask, input)}
+              onCancel={closeEditDialog}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
-      {deletingTask && (
-        <ConfirmDialog
-          title="タスクの削除"
-          message={`「${deletingTask.title}」を削除しますか？`}
-          confirmLabel="削除する"
-          onConfirm={() => handleDelete(deletingTask)}
-          onCancel={closeDeleteDialog}
-        />
-      )}
+      <AlertDialog
+        open={deletingTask !== null}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteDialog()
+        }}
+      >
+        <AlertDialogContent initialFocus={cancelDeleteRef}>
+          <AlertDialogHeader>
+            <AlertDialogMedia className="bg-destructive/10 text-destructive">
+              <Trash2Icon aria-hidden="true" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>タスクの削除</AlertDialogTitle>
+            <AlertDialogDescription>
+              {lastDeletingTask && `「${lastDeletingTask.title}」を削除しますか？`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel ref={cancelDeleteRef}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              className="bg-destructive text-white hover:bg-destructive/90 dark:bg-destructive/60"
+              onClick={() => lastDeletingTask && handleDelete(lastDeletingTask)}
+            >
+              削除する
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
