@@ -37,6 +37,19 @@ npx vitest run -t "見出し"    # テスト名で絞り込んで実行
 - レイアウトやページの props 型には、Next が生成するグローバル型（例: `LayoutProps<"/">`）を使っています。
 - Tailwind CSS v4 は PostCSS ではなく、`next.config.ts` の `turbopack.rules` で `@tailwindcss/turbopack` ローダーを通して読み込んでいます。テーマトークンは `src/app/globals.css` の `@theme inline` で定義しています。
 
+## shadcn/ui
+
+- 設定は `components.json` にあります。スタイルは `base-nova`、色は `neutral` で、CSS 変数でテーマを指定します。
+- 部品の土台は Radix UI ではなく **Base UI**（`@base-ui/react`）です。Radix 版の例をそのまま使わないでください。たとえば別の要素として描画するときは、`asChild` ではなく `render` prop を使います。書く前に Context7 MCP で Base UI 版のドキュメントを確認してください。
+- 部品は `npx shadcn@latest add <name>` で `src/components/ui/` に追加します。手で一から書かないでください。追加した部品は自由に編集できます。
+- クラス名の結合には `cn()` を使います。アプリのコードでは `@/lib/utils` から import します（中身は `cn` パッケージの再エクスポートです）。
+- アイコンは `lucide-react` を使います。
+- テーマの色や角丸は `src/app/globals.css` の `:root` と `.dark` にある CSS 変数で定義し、`@theme inline` で Tailwind のトークン（`bg-primary` や `text-muted-foreground` など）に対応させています。色を変えるときは、個別のクラスではなく CSS 変数を変えてください。
+- ダークモードは `<html>` に `.dark` クラスを付けたときだけ有効になります。OS の設定に合わせて自動では切り替わりません。今は `.dark` を付ける仕組みがありません。
+- フォントは `layout.tsx` の Geist（`--font-geist-sans`）を `@theme inline` の `--font-sans` に割り当てています。`shadcn init` や `--reinstall` を実行すると `--font-sans: var(--font-sans)` という自己参照に書き換えられることがあるので、実行後は確認してください。
+- PostCSS の設定は追加しないでください。Tailwind は turbopack のローダーで処理しています。
+- 既存の画面（`src/app/_components/`）はまだ shadcn の部品に置き換えていません。置き換えるときは、テストが参照しているロール・アクセシブルな名前・`aria-*` 属性が変わらないようにしてください。
+
 ## Supabase
 
 - `@supabase/ssr` と `@supabase/supabase-js` を使っています。
