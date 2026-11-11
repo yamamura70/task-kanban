@@ -1,17 +1,20 @@
 import { CalendarIcon, PencilIcon, Trash2Icon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { formatDueDate } from '@/lib/tasks/dueDate'
+import { formatDueDate, isOverdue } from '@/lib/tasks/dueDate'
 import type { Task } from '@/lib/tasks/types'
 import { cn } from '@/lib/utils'
 import { STATUS_STYLES } from './statusStyles'
 
 type TaskCardProps = {
   task: Task
+  /** 今日の日付（`YYYY-MM-DD`）。期限切れの判定に使う */
+  today: string | null
   onEdit: (task: Task) => void
   onDelete: (task: Task) => void
 }
 
-export function TaskCard({ task, onEdit, onDelete }: TaskCardProps) {
+export function TaskCard({ task, today, onEdit, onDelete }: TaskCardProps) {
+  const overdue = isOverdue(task, today)
   return (
     <li
       className={cn(
@@ -50,10 +53,16 @@ export function TaskCard({ task, onEdit, onDelete }: TaskCardProps) {
         </p>
       )}
       {task.dueDate && (
-        <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+        <p
+          className={cn(
+            'mt-2 flex items-center gap-1 text-xs',
+            overdue ? 'font-medium text-destructive' : 'text-muted-foreground',
+          )}
+        >
           <CalendarIcon className="size-3.5" aria-hidden="true" />
           <span>
             期限 <time dateTime={task.dueDate}>{formatDueDate(task.dueDate)}</time>
+            {overdue && '（期限切れ）'}
           </span>
         </p>
       )}

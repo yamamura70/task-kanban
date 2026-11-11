@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils'
 import { STATUS_STYLES } from './statusStyles'
 import { TaskCard } from './TaskCard'
 import { TaskForm } from './TaskForm'
+import { useToday } from './useToday'
 
 type TaskChange =
   | { type: 'add'; task: Task }
@@ -65,6 +66,7 @@ export function TaskBoard({ initialTasks }: TaskBoardProps) {
   }
 
   const [optimisticTasks, applyOptimistic] = useOptimistic(tasks, applyChange)
+  const today = useToday()
   const [, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
@@ -191,6 +193,7 @@ export function TaskBoard({ initialTasks }: TaskBoardProps) {
                     <TaskCard
                       key={task.id}
                       task={task}
+                      today={today}
                       onEdit={setEditingTask}
                       onDelete={setDeletingTask}
                     />

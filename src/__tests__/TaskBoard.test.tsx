@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TaskBoard } from '@/app/_components/TaskBoard'
@@ -99,6 +99,80 @@ describe('一覧表示', () => {
     render(<TaskBoard initialTasks={[]} />)
 
     expect(screen.getAllByText('タスクはありません')).toHaveLength(3)
+  })
+})
+
+describe('期限切れの表示', () => {
+  beforeEach(() => {
+    // user-event のタイマーを止めないよう Date だけを偽装する
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 11, 9, 0))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  test('期限が過ぎた未完了のタスクには期限切れと表示される', () => {
+    render(
+      <TaskBoard
+        initialTasks={[
+          { id: '1', title: '昨日まで', description: '', status: 'todo', dueDate: '2026-11-10' },
+          { id: '2', title: '進行中', description: '', status: 'in_progress', dueDate: '2026-11-01' },
+        ]}
+      />,
+    )
+
+    expect(within(column('Todo')).getByText(/期限切れ/)).toBeDefined()
+    expect(within(column('In Progress')).getByText(/期限切れ/)).toBeDefined()
+  })
+
+  test('期限が今日や未来のタスクには期限切れと表示されない', () => {
+    render(
+      <TaskBoard
+        initialTasks={[
+          { id: '1', title: '今日まで', description: '', status: 'todo', dueDate: '2026-11-11' },
+          { id: '2', title: '明日まで', description: '', status: 'todo', dueDate: '2026-11-12' },
+        ]}
+      />,
+    )
+
+    expect(within(column('Todo')).getByText('2026/11/11')).toBeDefined()
+    expect(screen.queryByText(/期限切れ/)).toBeNull()
+  })
+
+  test('完了したタスクは期限が過ぎていても期限切れと表示されない', () => {
+    render(
+      <TaskBoard
+        initialTasks={[
+          { id: '1', title: '完了済み', description: '', status: 'done', dueDate: '2026-11-10' },
+        ]}
+      />,
+    )
+
+    expect(within(column('Done')).getByText('2026/11/10')).toBeDefined()
+    expect(screen.queryByText(/期限切れ/)).toBeNull()
+  })
+
+  test('期限切れのタスクを完了にすると期限切れの表示が消える', async () => {
+    const user = userEvent.setup()
+    const overdueTask: Task = {
+      id: '1',
+      title: '昨日まで',
+      description: '',
+      status: 'todo',
+      dueDate: '2026-11-10',
+    }
+    vi.mocked(updateTask).mockResolvedValue({ ok: true, data: { ...overdueTask, status: 'done' } })
+    render(<TaskBoard initialTasks={[overdueTask]} />)
+
+    await user.click(screen.getByRole('button', { name: '「昨日まで」を編集' }))
+    const dialog = screen.getByRole('dialog', { name: 'タスクを編集' })
+    await user.selectOptions(within(dialog).getByLabelText('ステータス'), 'done')
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+
+    expect(await within(column('Done')).findByText('昨日まで')).toBeDefined()
+    expect(screen.queryByText(/期限切れ/)).toBeNull()
   })
 })
 

@@ -68,7 +68,7 @@ npx vitest run -t "見出し"    # テスト名で絞り込んで実行
 
 ### tasks テーブル
 
-- 列: `id`(uuid) / `title`(1〜100文字、空白のみは不可) / `description`(1000文字以内、既定値は空文字) / `status`(`todo` / `in_progress` / `done`) / `created_at` / `updated_at`（トリガーで自動更新）。
+- 列: `id`(uuid) / `title`(1〜100文字、空白のみは不可) / `description`(1000文字以内、既定値は空文字) / `status`(`todo` / `in_progress` / `done`) / `due_date`(date。期限。NULL なら期限なし) / `created_at` / `updated_at`（トリガーで自動更新）。
 - 認証はありません。RLS は有効で、anon と authenticated に全操作を許可するポリシーを設定しています。ログイン機能を追加する場合はポリシーの見直しが必要です。
 - 文字数とステータスの制約は DB の check 制約と `src/lib/tasks/validation.ts` の両方にあります。片方を変えるときはもう片方も合わせてください。
 - `status` は Postgres の enum ではなく、text 型に check 制約を付けています。そのため生成される型では `string` になります。アプリでは `isTaskStatus()` と `toTask()` で `TaskStatus` 型に絞り込んで使います。
@@ -77,13 +77,16 @@ npx vitest run -t "見出し"    # テスト名で絞り込んで実行
 ## タスク機能の構成
 
 - `src/lib/tasks/types.ts`: `Task` 型、`TASK_STATUSES`（列の定義と表示名）、`ActionResult`、DB の行を変換する `toTask()`
-- `src/lib/tasks/validation.ts`: `validateTaskInput()`。クライアント（フォーム）とサーバー（Server Actions）の両方で使います。
+- `src/lib/tasks/validation.ts`: `validateTaskInput()`。クライアント（フォーム）とサーバー（Server Actions）の両方で使います。期限は `YYYY-MM-DD` の実在する日付か、未入力（空文字・null）なら `null` にします。過去の日付も許可します。
+- `src/lib/tasks/dueDate.ts`: 期限の表示用の整形（`formatDueDate()`）、並べ替え（`sortByDueDate()`）、期限切れの判定（`isOverdue()`。完了以外で期限が今日より前）。日付は `YYYY-MM-DD` の文字列のまま比較し、`Date` に変換しません（タイムゾーンでずれるため）。
+- `src/app/_components/useToday.ts`: ブラウザのローカル日付を返すフック。サーバーでの描画中は `null` を返し、ハイドレーションの不一致を防ぎます（`null` の間は期限切れを表示しません）。
 - `src/app/actions.ts`: Server Actions（`createTask` / `updateTask` / `deleteTask`）。入力を再検証してから書き込み、成功したら `refresh()`（`next/cache`）を呼びます。例外は投げず、`{ ok, data }` か `{ ok: false, error }` を返します。
 - `src/app/page.tsx`: 同期コンポーネントです。DB からの読み込みは async の `TaskBoardLoader` で行い、`<Suspense>` で囲んでいます（Cache Components では cookies を使う処理に Suspense が必要です）。
 - `src/app/_components/TaskBoard.tsx`: カンバン本体（Client Component）。`useOptimistic` で操作結果をすぐ表示し、成功したら内部の状態を確定、失敗したら表示を元に戻してエラーを出します。`refresh()` で届いた新しい `initialTasks` は内部の状態に反映します。
 - 編集は shadcn の `Dialog`（`role="dialog"`）、削除確認は `AlertDialog`（`role="alertdialog"`、キャンセルに初期フォーカス）で表示します。どちらも Esc キーで閉じます。閉じるアニメーション中も内容を表示できるよう、`TaskBoard` は最後に開いた対象（`lastEditingTask` / `lastDeletingTask`）を保持しています。
 - `TaskForm` は追加と編集で共通です。`task` を渡すと編集モードになり、ステータスのセレクトが表示されます。入力欄は非制御（`defaultValue`）で、送信時に `validateTaskInput()` で検証します。
 - 列の並び順と表示名は `TASK_STATUSES` の定義順で決まります。
+- 列の中のタスクは期限が近い順に並べ、期限のないタスクは最後に置きます。期限が同じものは作成順です（`TaskBoard` で `sortByDueDate()` を適用）。
 
 ### よくある変更の手順
 
@@ -112,13 +115,13 @@ npx vitest run -t "見出し"    # テスト名で絞り込んで実行
 
 ## デザインルール
 
-shadcn/ui（neutral）を土台に、白とグレーを基調にした落ち着いた見た目にしています。色を付けるのはステータスと破壊的な操作だけです。
+shadcn/ui（neutral）を土台に、白とグレーを基調にした落ち着いた見た目にしています。色を付けるのはステータスと破壊的な操作と期限切れだけです。
 
 ### 色
 - 色はテーマのトークン（`bg-card`、`bg-muted`、`text-muted-foreground`、`border`、`text-destructive` など）だけを使います。`zinc-*`、`red-*`、`blue-*` など Tailwind の色を直接書かないでください。
 - ステータスの色は `src/app/_components/statusStyles.ts` の `STATUS_STYLES` 経由で使います（`dot` は丸印、`accent` はカード左端の帯）。ステータスを追加するときは、`globals.css` の `:root` と `.dark` の `--status-*`、`@theme inline` の `--color-status-*`、`STATUS_STYLES` をまとめて追加します。
 - Tailwind はクラス名を文字列のまま検出します。`` `bg-status-${status}` `` のように組み立てず、完全なクラス名を書いてください。
-- 赤（destructive）はエラーと削除にだけ使います。
+- 赤（destructive）はエラーと削除と期限切れにだけ使います。期限切れは色だけに頼らず「（期限切れ）」の文言も添えます。
 
 ### レイアウトと余白
 - ページの背景は `bg-muted/30`、ヘッダーは `border-b bg-background` です。中身は `mx-auto max-w-6xl px-4` で横幅をそろえます。
