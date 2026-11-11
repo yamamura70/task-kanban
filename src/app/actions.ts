@@ -2,7 +2,7 @@
 
 import { refresh } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { toTask, type ActionResult, type Task, type TaskInput } from '@/lib/tasks/types'
+import { toTask, toTaskRow, type ActionResult, type Task, type TaskInput } from '@/lib/tasks/types'
 import { validateTaskInput } from '@/lib/tasks/validation'
 
 const missingIdError = 'タスクが指定されていません'
@@ -14,7 +14,7 @@ export async function createTask(input: TaskInput): Promise<ActionResult<Task>> 
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('tasks')
-    .insert(validated.data)
+    .insert(toTaskRow(validated.data))
     .select()
     .single()
   if (error || !data) return { ok: false, error: 'タスクの追加に失敗しました' }
@@ -34,7 +34,7 @@ export async function updateTask(
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('tasks')
-    .update(validated.data)
+    .update(toTaskRow(validated.data))
     .eq('id', id)
     .select()
     .single()

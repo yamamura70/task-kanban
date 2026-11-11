@@ -34,6 +34,7 @@ const row = {
   title: '買い物',
   description: '牛乳',
   status: 'todo',
+  due_date: null,
   created_at: '2026-11-09T00:00:00Z',
   updated_at: '2026-11-09T00:00:00Z',
 }
@@ -53,12 +54,52 @@ describe('createTask', () => {
       title: '買い物',
       description: '牛乳',
       status: 'todo',
+      due_date: null,
     })
     expect(result).toEqual({
       ok: true,
-      data: { id: 'task-1', title: '買い物', description: '牛乳', status: 'todo' },
+      data: {
+        id: 'task-1',
+        title: '買い物',
+        description: '牛乳',
+        status: 'todo',
+        dueDate: null,
+      },
     })
     expect(refresh).toHaveBeenCalled()
+  })
+
+  test('期限を指定すると due_date として保存し、期限付きのタスクを返す', async () => {
+    const { builder } = mockSupabase({ data: { ...row, due_date: '2026-11-20' }, error: null })
+
+    const result = await createTask({ title: '買い物', description: '牛乳', dueDate: '2026-11-20' })
+
+    expect(builder.insert).toHaveBeenCalledWith({
+      title: '買い物',
+      description: '牛乳',
+      status: 'todo',
+      due_date: '2026-11-20',
+    })
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        id: 'task-1',
+        title: '買い物',
+        description: '牛乳',
+        status: 'todo',
+        dueDate: '2026-11-20',
+      },
+    })
+  })
+
+  test('期限の日付が不正ならDBに書き込まずエラーを返す', async () => {
+    const { client } = mockSupabase({ data: row, error: null })
+
+    const result = await createTask({ title: '買い物', dueDate: '2026-02-30' })
+
+    expect(result).toEqual({ ok: false, error: '期限の日付が正しくありません' })
+    expect(client.from).not.toHaveBeenCalled()
+    expect(refresh).not.toHaveBeenCalled()
   })
 
   test('タイトルが空ならDBに書き込まずエラーを返す', async () => {
@@ -96,13 +137,34 @@ describe('updateTask', () => {
       title: '買い物（済）',
       description: '牛乳',
       status: 'done',
+      due_date: null,
     })
     expect(builder.eq).toHaveBeenCalledWith('id', 'task-1')
     expect(result).toEqual({
       ok: true,
-      data: { id: 'task-1', title: '買い物（済）', description: '牛乳', status: 'done' },
+      data: {
+        id: 'task-1',
+        title: '買い物（済）',
+        description: '牛乳',
+        status: 'done',
+        dueDate: null,
+      },
     })
     expect(refresh).toHaveBeenCalled()
+  })
+
+  test('期限を空にして更新すると due_date を null にする', async () => {
+    const { builder } = mockSupabase({ data: row, error: null })
+
+    const result = await updateTask('task-1', { title: '買い物', description: '牛乳', dueDate: '' })
+
+    expect(builder.update).toHaveBeenCalledWith({
+      title: '買い物',
+      description: '牛乳',
+      status: 'todo',
+      due_date: null,
+    })
+    expect(result).toMatchObject({ ok: true, data: { dueDate: null } })
   })
 
   test('不正なステータスならDBに書き込まずエラーを返す', async () => {

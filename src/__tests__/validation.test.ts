@@ -11,16 +11,21 @@ describe('validateTaskInput', () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { title: '買い物', description: '牛乳を買う', status: 'in_progress' },
+      data: {
+        title: '買い物',
+        description: '牛乳を買う',
+        status: 'in_progress',
+        dueDate: null,
+      },
     })
   })
 
-  test('ステータスと説明を省略すると Todo と空文字になる', () => {
+  test('ステータス・説明・期限を省略すると Todo・空文字・期限なしになる', () => {
     const result = validateTaskInput({ title: '買い物' })
 
     expect(result).toEqual({
       ok: true,
-      data: { title: '買い物', description: '', status: 'todo' },
+      data: { title: '買い物', description: '', status: 'todo', dueDate: null },
     })
   })
 
@@ -76,5 +81,41 @@ describe('validateTaskInput', () => {
     const result = validateTaskInput({ title: 'a', status: 'archived' })
 
     expect(result).toEqual({ ok: false, error: 'ステータスが不正です' })
+  })
+
+  test('期限が正しい日付ならその日付を返す', () => {
+    const result = validateTaskInput({ title: 'a', dueDate: '2026-11-20' })
+
+    expect(result).toMatchObject({ ok: true, data: { dueDate: '2026-11-20' } })
+  })
+
+  test.each([
+    ['空文字', ''],
+    ['null', null],
+  ])('期限が%sなら期限なしになる', (_, dueDate) => {
+    const result = validateTaskInput({ title: 'a', dueDate })
+
+    expect(result).toMatchObject({ ok: true, data: { dueDate: null } })
+  })
+
+  test('期限がうるう年の2月29日なら有効になる', () => {
+    const result = validateTaskInput({ title: 'a', dueDate: '2028-02-29' })
+
+    expect(result).toMatchObject({ ok: true, data: { dueDate: '2028-02-29' } })
+  })
+
+  test.each([
+    ['うるう年でない年の2月29日', '2027-02-29'],
+    ['実在しない日付', '2026-02-30'],
+    ['13月', '2026-13-01'],
+    ['スラッシュ区切り', '2026/11/20'],
+    ['ゼロ埋めなし', '2026-1-5'],
+    ['日時を含む文字列', '2026-11-20T00:00:00Z'],
+    ['日付でない文字列', 'あした'],
+    ['文字列以外', 20261120],
+  ])('期限が%sだとエラーになる', (_, dueDate) => {
+    const result = validateTaskInput({ title: 'a', dueDate })
+
+    expect(result).toEqual({ ok: false, error: '期限の日付が正しくありません' })
   })
 })

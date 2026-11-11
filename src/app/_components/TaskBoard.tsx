@@ -18,6 +18,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { sortByDueDate } from '@/lib/tasks/dueDate'
 import {
   TASK_STATUSES,
   type ActionResult,
@@ -28,6 +29,7 @@ import { cn } from '@/lib/utils'
 import { STATUS_STYLES } from './statusStyles'
 import { TaskCard } from './TaskCard'
 import { TaskForm } from './TaskForm'
+import { useToday } from './useToday'
 
 type TaskChange =
   | { type: 'add'; task: Task }
@@ -64,6 +66,7 @@ export function TaskBoard({ initialTasks }: TaskBoardProps) {
   }
 
   const [optimisticTasks, applyOptimistic] = useOptimistic(tasks, applyChange)
+  const today = useToday()
   const [, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
@@ -103,7 +106,12 @@ export function TaskBoard({ initialTasks }: TaskBoardProps) {
     const temporaryTask: Task = { id: `temp-${Date.now()}`, ...input }
     mutate(
       { type: 'add', task: temporaryTask },
-      () => createTask({ title: input.title, description: input.description }),
+      () =>
+        createTask({
+          title: input.title,
+          description: input.description,
+          dueDate: input.dueDate,
+        }),
       (task) => ({ type: 'add', task }),
     )
   }
@@ -154,7 +162,9 @@ export function TaskBoard({ initialTasks }: TaskBoardProps) {
 
       <div className="grid items-start gap-4 md:grid-cols-3">
         {TASK_STATUSES.map((status) => {
-          const columnTasks = optimisticTasks.filter((task) => task.status === status.value)
+          const columnTasks = sortByDueDate(
+            optimisticTasks.filter((task) => task.status === status.value),
+          )
           const headingId = `column-${status.value}`
           return (
             <section
@@ -183,6 +193,7 @@ export function TaskBoard({ initialTasks }: TaskBoardProps) {
                     <TaskCard
                       key={task.id}
                       task={task}
+                      today={today}
                       onEdit={setEditingTask}
                       onDelete={setDeletingTask}
                     />

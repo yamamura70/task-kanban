@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TaskBoard } from '@/app/_components/TaskBoard'
@@ -13,8 +13,8 @@ vi.mock('@/app/actions', () => ({
 }))
 
 const tasks: Task[] = [
-  { id: '1', title: '買い物', description: '牛乳を買う', status: 'todo' },
-  { id: '2', title: '資料作成', description: '', status: 'in_progress' },
+  { id: '1', title: '買い物', description: '牛乳を買う', status: 'todo', dueDate: null },
+  { id: '2', title: '資料作成', description: '', status: 'in_progress', dueDate: null },
 ]
 
 function column(name: string) {
@@ -42,10 +42,137 @@ describe('一覧表示', () => {
     expect(within(column('Todo')).queryByText('タスクはありません')).toBeNull()
   })
 
+  test('期限のあるタスクには期限の日付が表示される', () => {
+    render(
+      <TaskBoard initialTasks={[{ ...tasks[0], dueDate: '2026-11-20' }, tasks[1]]} />,
+    )
+
+    expect(within(column('Todo')).getByText('2026/11/20')).toBeDefined()
+    expect(within(column('In Progress')).queryByText(/期限/)).toBeNull()
+  })
+
+  test('列の中では期限が近い順に並び、期限のないタスクは最後になる', () => {
+    render(
+      <TaskBoard
+        initialTasks={[
+          { id: '1', title: '期限なし', description: '', status: 'todo', dueDate: null },
+          { id: '2', title: '来月', description: '', status: 'todo', dueDate: '2026-12-01' },
+          { id: '3', title: '来週', description: '', status: 'todo', dueDate: '2026-11-18' },
+        ]}
+      />,
+    )
+
+    const titles = within(column('Todo'))
+      .getAllByRole('heading', { level: 3 })
+      .map((heading) => heading.textContent)
+    expect(titles).toEqual(['来週', '来月', '期限なし'])
+  })
+
+  test('期限付きで追加したタスクは期限の順の位置に表示される', async () => {
+    const user = userEvent.setup()
+    vi.mocked(createTask).mockResolvedValue({
+      ok: true,
+      data: { id: '3', title: '掃除', description: '', status: 'todo', dueDate: '2026-11-15' },
+    })
+    render(
+      <TaskBoard
+        initialTasks={[
+          { id: '1', title: '期限なし', description: '', status: 'todo', dueDate: null },
+          { id: '2', title: '来月', description: '', status: 'todo', dueDate: '2026-12-01' },
+        ]}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('タイトル'), '掃除')
+    await user.type(screen.getByLabelText('期限'), '2026-11-15')
+    await user.click(screen.getByRole('button', { name: '追加' }))
+
+    await waitFor(() => {
+      const titles = within(column('Todo'))
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent)
+      expect(titles).toEqual(['掃除', '来月', '期限なし'])
+    })
+  })
+
   test('タスクが0件なら全ての列が空表示になる', () => {
     render(<TaskBoard initialTasks={[]} />)
 
     expect(screen.getAllByText('タスクはありません')).toHaveLength(3)
+  })
+})
+
+describe('期限切れの表示', () => {
+  beforeEach(() => {
+    // user-event のタイマーを止めないよう Date だけを偽装する
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 11, 9, 0))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  test('期限が過ぎた未完了のタスクには期限切れと表示される', () => {
+    render(
+      <TaskBoard
+        initialTasks={[
+          { id: '1', title: '昨日まで', description: '', status: 'todo', dueDate: '2026-11-10' },
+          { id: '2', title: '進行中', description: '', status: 'in_progress', dueDate: '2026-11-01' },
+        ]}
+      />,
+    )
+
+    expect(within(column('Todo')).getByText(/期限切れ/)).toBeDefined()
+    expect(within(column('In Progress')).getByText(/期限切れ/)).toBeDefined()
+  })
+
+  test('期限が今日や未来のタスクには期限切れと表示されない', () => {
+    render(
+      <TaskBoard
+        initialTasks={[
+          { id: '1', title: '今日まで', description: '', status: 'todo', dueDate: '2026-11-11' },
+          { id: '2', title: '明日まで', description: '', status: 'todo', dueDate: '2026-11-12' },
+        ]}
+      />,
+    )
+
+    expect(within(column('Todo')).getByText('2026/11/11')).toBeDefined()
+    expect(screen.queryByText(/期限切れ/)).toBeNull()
+  })
+
+  test('完了したタスクは期限が過ぎていても期限切れと表示されない', () => {
+    render(
+      <TaskBoard
+        initialTasks={[
+          { id: '1', title: '完了済み', description: '', status: 'done', dueDate: '2026-11-10' },
+        ]}
+      />,
+    )
+
+    expect(within(column('Done')).getByText('2026/11/10')).toBeDefined()
+    expect(screen.queryByText(/期限切れ/)).toBeNull()
+  })
+
+  test('期限切れのタスクを完了にすると期限切れの表示が消える', async () => {
+    const user = userEvent.setup()
+    const overdueTask: Task = {
+      id: '1',
+      title: '昨日まで',
+      description: '',
+      status: 'todo',
+      dueDate: '2026-11-10',
+    }
+    vi.mocked(updateTask).mockResolvedValue({ ok: true, data: { ...overdueTask, status: 'done' } })
+    render(<TaskBoard initialTasks={[overdueTask]} />)
+
+    await user.click(screen.getByRole('button', { name: '「昨日まで」を編集' }))
+    const dialog = screen.getByRole('dialog', { name: 'タスクを編集' })
+    await user.selectOptions(within(dialog).getByLabelText('ステータス'), 'done')
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+
+    expect(await within(column('Done')).findByText('昨日まで')).toBeDefined()
+    expect(screen.queryByText(/期限切れ/)).toBeNull()
   })
 })
 
@@ -54,7 +181,7 @@ describe('追加', () => {
     const user = userEvent.setup()
     vi.mocked(createTask).mockResolvedValue({
       ok: true,
-      data: { id: '3', title: '掃除', description: '部屋', status: 'todo' },
+      data: { id: '3', title: '掃除', description: '部屋', status: 'todo', dueDate: null },
     })
     render(<TaskBoard initialTasks={tasks} />)
 
@@ -63,8 +190,29 @@ describe('追加', () => {
     await user.click(screen.getByRole('button', { name: '追加' }))
 
     expect(await within(column('Todo')).findByText('掃除')).toBeDefined()
-    expect(createTask).toHaveBeenCalledWith({ title: '掃除', description: '部屋' })
+    expect(createTask).toHaveBeenCalledWith({ title: '掃除', description: '部屋', dueDate: null })
     expect((screen.getByLabelText('タイトル') as HTMLInputElement).value).toBe('')
+  })
+
+  test('期限を入力して追加すると期限付きで保存され、カードに期限が表示される', async () => {
+    const user = userEvent.setup()
+    vi.mocked(createTask).mockResolvedValue({
+      ok: true,
+      data: { id: '3', title: '掃除', description: '', status: 'todo', dueDate: '2026-11-20' },
+    })
+    render(<TaskBoard initialTasks={tasks} />)
+
+    await user.type(screen.getByLabelText('タイトル'), '掃除')
+    await user.type(screen.getByLabelText('期限'), '2026-11-20')
+    await user.click(screen.getByRole('button', { name: '追加' }))
+
+    expect(createTask).toHaveBeenCalledWith({
+      title: '掃除',
+      description: '',
+      dueDate: '2026-11-20',
+    })
+    expect(await within(column('Todo')).findByText('2026/11/20')).toBeDefined()
+    expect((screen.getByLabelText('期限') as HTMLInputElement).value).toBe('')
   })
 
   test('サーバーの応答を待たずに追加したタスクが表示される', async () => {
@@ -83,7 +231,7 @@ describe('追加', () => {
     expect(await within(column('Todo')).findByText('掃除')).toBeDefined()
 
     // 実行中のアクションを残すと他のテストに影響するため、応答を返して完了させる
-    respond({ ok: true, data: { id: '3', title: '掃除', description: '', status: 'todo' } })
+    respond({ ok: true, data: { id: '3', title: '掃除', description: '', status: 'todo', dueDate: null } })
     expect(await within(column('Todo')).findByText('掃除')).toBeDefined()
   })
 
@@ -140,13 +288,60 @@ describe('編集', () => {
     expect((within(dialog).getByLabelText('ステータス') as HTMLSelectElement).value).toBe(
       'todo',
     )
+    expect((within(dialog).getByLabelText('期限') as HTMLInputElement).value).toBe('')
+  })
+
+  test('期限のあるタスクの編集ダイアログには現在の期限が入っている', async () => {
+    const user = userEvent.setup()
+    render(<TaskBoard initialTasks={[{ ...tasks[0], dueDate: '2026-11-20' }]} />)
+
+    await user.click(screen.getByRole('button', { name: '「買い物」を編集' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'タスクを編集' })
+    expect((within(dialog).getByLabelText('期限') as HTMLInputElement).value).toBe('2026-11-20')
+  })
+
+  test('期限を設定して保存すると、カードに期限が表示される', async () => {
+    const user = userEvent.setup()
+    vi.mocked(updateTask).mockResolvedValue({
+      ok: true,
+      data: { ...tasks[0], dueDate: '2026-12-01' },
+    })
+    render(<TaskBoard initialTasks={tasks} />)
+
+    await user.click(screen.getByRole('button', { name: '「買い物」を編集' }))
+    const dialog = screen.getByRole('dialog', { name: 'タスクを編集' })
+    await user.type(within(dialog).getByLabelText('期限'), '2026-12-01')
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+
+    expect(updateTask).toHaveBeenCalledWith('1', {
+      title: '買い物',
+      description: '牛乳を買う',
+      status: 'todo',
+      dueDate: '2026-12-01',
+    })
+    expect(await within(column('Todo')).findByText('2026/12/01')).toBeDefined()
+  })
+
+  test('期限を空にして保存すると、期限が解除されてカードから消える', async () => {
+    const user = userEvent.setup()
+    vi.mocked(updateTask).mockResolvedValue({ ok: true, data: tasks[0] })
+    render(<TaskBoard initialTasks={[{ ...tasks[0], dueDate: '2026-11-20' }]} />)
+
+    await user.click(screen.getByRole('button', { name: '「買い物」を編集' }))
+    const dialog = screen.getByRole('dialog', { name: 'タスクを編集' })
+    await user.clear(within(dialog).getByLabelText('期限'))
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+
+    expect(updateTask).toHaveBeenCalledWith('1', expect.objectContaining({ dueDate: null }))
+    await waitFor(() => expect(within(column('Todo')).queryByText('2026/11/20')).toBeNull())
   })
 
   test('タイトルとステータスを変更して保存すると、変更後の列に表示される', async () => {
     const user = userEvent.setup()
     vi.mocked(updateTask).mockResolvedValue({
       ok: true,
-      data: { id: '1', title: '買い物（済）', description: '牛乳を買う', status: 'done' },
+      data: { id: '1', title: '買い物（済）', description: '牛乳を買う', status: 'done', dueDate: null },
     })
     render(<TaskBoard initialTasks={tasks} />)
 
@@ -165,6 +360,7 @@ describe('編集', () => {
       title: '買い物（済）',
       description: '牛乳を買う',
       status: 'done',
+      dueDate: null,
     })
   })
 
