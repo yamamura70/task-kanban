@@ -9,7 +9,7 @@ export async function TaskBoardLoader() {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('tasks')
-    .select('id, title, description, status')
+    .select('id, title, description, status, due_date')
     .order('created_at', { ascending: true })
 
   if (error) {

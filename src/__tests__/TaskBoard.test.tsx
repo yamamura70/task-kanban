@@ -13,8 +13,8 @@ vi.mock('@/app/actions', () => ({
 }))
 
 const tasks: Task[] = [
-  { id: '1', title: '買い物', description: '牛乳を買う', status: 'todo' },
-  { id: '2', title: '資料作成', description: '', status: 'in_progress' },
+  { id: '1', title: '買い物', description: '牛乳を買う', status: 'todo', dueDate: null },
+  { id: '2', title: '資料作成', description: '', status: 'in_progress', dueDate: null },
 ]
 
 function column(name: string) {
@@ -54,7 +54,7 @@ describe('追加', () => {
     const user = userEvent.setup()
     vi.mocked(createTask).mockResolvedValue({
       ok: true,
-      data: { id: '3', title: '掃除', description: '部屋', status: 'todo' },
+      data: { id: '3', title: '掃除', description: '部屋', status: 'todo', dueDate: null },
     })
     render(<TaskBoard initialTasks={tasks} />)
 
@@ -83,7 +83,7 @@ describe('追加', () => {
     expect(await within(column('Todo')).findByText('掃除')).toBeDefined()
 
     // 実行中のアクションを残すと他のテストに影響するため、応答を返して完了させる
-    respond({ ok: true, data: { id: '3', title: '掃除', description: '', status: 'todo' } })
+    respond({ ok: true, data: { id: '3', title: '掃除', description: '', status: 'todo', dueDate: null } })
     expect(await within(column('Todo')).findByText('掃除')).toBeDefined()
   })
 
@@ -146,7 +146,7 @@ describe('編集', () => {
     const user = userEvent.setup()
     vi.mocked(updateTask).mockResolvedValue({
       ok: true,
-      data: { id: '1', title: '買い物（済）', description: '牛乳を買う', status: 'done' },
+      data: { id: '1', title: '買い物（済）', description: '牛乳を買う', status: 'done', dueDate: null },
     })
     render(<TaskBoard initialTasks={tasks} />)
 
@@ -165,6 +165,7 @@ describe('編集', () => {
       title: '買い物（済）',
       description: '牛乳を買う',
       status: 'done',
+      dueDate: null,
     })
   })
 
