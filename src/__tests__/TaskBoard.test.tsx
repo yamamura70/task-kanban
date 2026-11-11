@@ -42,6 +42,15 @@ describe('一覧表示', () => {
     expect(within(column('Todo')).queryByText('タスクはありません')).toBeNull()
   })
 
+  test('期限のあるタスクには期限の日付が表示される', () => {
+    render(
+      <TaskBoard initialTasks={[{ ...tasks[0], dueDate: '2026-11-20' }, tasks[1]]} />,
+    )
+
+    expect(within(column('Todo')).getByText('2026/11/20')).toBeDefined()
+    expect(within(column('In Progress')).queryByText(/期限/)).toBeNull()
+  })
+
   test('タスクが0件なら全ての列が空表示になる', () => {
     render(<TaskBoard initialTasks={[]} />)
 
@@ -63,8 +72,29 @@ describe('追加', () => {
     await user.click(screen.getByRole('button', { name: '追加' }))
 
     expect(await within(column('Todo')).findByText('掃除')).toBeDefined()
-    expect(createTask).toHaveBeenCalledWith({ title: '掃除', description: '部屋' })
+    expect(createTask).toHaveBeenCalledWith({ title: '掃除', description: '部屋', dueDate: null })
     expect((screen.getByLabelText('タイトル') as HTMLInputElement).value).toBe('')
+  })
+
+  test('期限を入力して追加すると期限付きで保存され、カードに期限が表示される', async () => {
+    const user = userEvent.setup()
+    vi.mocked(createTask).mockResolvedValue({
+      ok: true,
+      data: { id: '3', title: '掃除', description: '', status: 'todo', dueDate: '2026-11-20' },
+    })
+    render(<TaskBoard initialTasks={tasks} />)
+
+    await user.type(screen.getByLabelText('タイトル'), '掃除')
+    await user.type(screen.getByLabelText('期限'), '2026-11-20')
+    await user.click(screen.getByRole('button', { name: '追加' }))
+
+    expect(createTask).toHaveBeenCalledWith({
+      title: '掃除',
+      description: '',
+      dueDate: '2026-11-20',
+    })
+    expect(await within(column('Todo')).findByText('2026/11/20')).toBeDefined()
+    expect((screen.getByLabelText('期限') as HTMLInputElement).value).toBe('')
   })
 
   test('サーバーの応答を待たずに追加したタスクが表示される', async () => {
@@ -140,6 +170,53 @@ describe('編集', () => {
     expect((within(dialog).getByLabelText('ステータス') as HTMLSelectElement).value).toBe(
       'todo',
     )
+    expect((within(dialog).getByLabelText('期限') as HTMLInputElement).value).toBe('')
+  })
+
+  test('期限のあるタスクの編集ダイアログには現在の期限が入っている', async () => {
+    const user = userEvent.setup()
+    render(<TaskBoard initialTasks={[{ ...tasks[0], dueDate: '2026-11-20' }]} />)
+
+    await user.click(screen.getByRole('button', { name: '「買い物」を編集' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'タスクを編集' })
+    expect((within(dialog).getByLabelText('期限') as HTMLInputElement).value).toBe('2026-11-20')
+  })
+
+  test('期限を設定して保存すると、カードに期限が表示される', async () => {
+    const user = userEvent.setup()
+    vi.mocked(updateTask).mockResolvedValue({
+      ok: true,
+      data: { ...tasks[0], dueDate: '2026-12-01' },
+    })
+    render(<TaskBoard initialTasks={tasks} />)
+
+    await user.click(screen.getByRole('button', { name: '「買い物」を編集' }))
+    const dialog = screen.getByRole('dialog', { name: 'タスクを編集' })
+    await user.type(within(dialog).getByLabelText('期限'), '2026-12-01')
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+
+    expect(updateTask).toHaveBeenCalledWith('1', {
+      title: '買い物',
+      description: '牛乳を買う',
+      status: 'todo',
+      dueDate: '2026-12-01',
+    })
+    expect(await within(column('Todo')).findByText('2026/12/01')).toBeDefined()
+  })
+
+  test('期限を空にして保存すると、期限が解除されてカードから消える', async () => {
+    const user = userEvent.setup()
+    vi.mocked(updateTask).mockResolvedValue({ ok: true, data: tasks[0] })
+    render(<TaskBoard initialTasks={[{ ...tasks[0], dueDate: '2026-11-20' }]} />)
+
+    await user.click(screen.getByRole('button', { name: '「買い物」を編集' }))
+    const dialog = screen.getByRole('dialog', { name: 'タスクを編集' })
+    await user.clear(within(dialog).getByLabelText('期限'))
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+
+    expect(updateTask).toHaveBeenCalledWith('1', expect.objectContaining({ dueDate: null }))
+    await waitFor(() => expect(within(column('Todo')).queryByText('2026/11/20')).toBeNull())
   })
 
   test('タイトルとステータスを変更して保存すると、変更後の列に表示される', async () => {

@@ -103,7 +103,12 @@ export function TaskBoard({ initialTasks }: TaskBoardProps) {
     const temporaryTask: Task = { id: `temp-${Date.now()}`, ...input }
     mutate(
       { type: 'add', task: temporaryTask },
-      () => createTask({ title: input.title, description: input.description }),
+      () =>
+        createTask({
+          title: input.title,
+          description: input.description,
+          dueDate: input.dueDate,
+        }),
       (task) => ({ type: 'add', task }),
     )
   }

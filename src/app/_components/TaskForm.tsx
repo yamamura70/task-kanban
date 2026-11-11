@@ -38,6 +38,7 @@ export function TaskForm({ task, submitLabel, onSubmit, onCancel }: TaskFormProp
       title: formData.get('title'),
       description: formData.get('description'),
       status: formData.get('status') ?? undefined,
+      dueDate: formData.get('dueDate'),
     })
     if (!result.ok) {
       setError(result.error)
@@ -50,7 +51,7 @@ export function TaskForm({ task, submitLabel, onSubmit, onCancel }: TaskFormProp
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-      <div className={cn('grid gap-4', !isEdit && 'md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]')}>
+      <div className={cn('grid gap-4', !isEdit && 'md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto]')}>
         <div className="flex flex-col gap-2">
           <Label htmlFor={`${id}-title`}>タイトル</Label>
           <Input
@@ -76,6 +77,16 @@ export function TaskForm({ task, submitLabel, onSubmit, onCancel }: TaskFormProp
             rows={isEdit ? 4 : 1}
             placeholder="詳細やメモ（任意）"
             className={cn(!isEdit && 'min-h-9')}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`${id}-due-date`}>期限</Label>
+          <Input
+            id={`${id}-due-date`}
+            name="dueDate"
+            type="date"
+            defaultValue={task?.dueDate ?? ''}
+            className="h-9"
           />
         </div>
       </div>

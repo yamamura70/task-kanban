@@ -1,5 +1,6 @@
-import { PencilIcon, Trash2Icon } from 'lucide-react'
+import { CalendarIcon, PencilIcon, Trash2Icon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { formatDueDate } from '@/lib/tasks/dueDate'
 import type { Task } from '@/lib/tasks/types'
 import { cn } from '@/lib/utils'
 import { STATUS_STYLES } from './statusStyles'
@@ -46,6 +47,14 @@ export function TaskCard({ task, onEdit, onDelete }: TaskCardProps) {
       {task.description && (
         <p className="mt-1 pr-2 text-sm whitespace-pre-wrap break-words text-muted-foreground">
           {task.description}
+        </p>
+      )}
+      {task.dueDate && (
+        <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+          <CalendarIcon className="size-3.5" aria-hidden="true" />
+          <span>
+            期限 <time dateTime={task.dueDate}>{formatDueDate(task.dueDate)}</time>
+          </span>
         </p>
       )}
     </li>
