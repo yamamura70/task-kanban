@@ -51,6 +51,50 @@ describe('一覧表示', () => {
     expect(within(column('In Progress')).queryByText(/期限/)).toBeNull()
   })
 
+  test('列の中では期限が近い順に並び、期限のないタスクは最後になる', () => {
+    render(
+      <TaskBoard
+        initialTasks={[
+          { id: '1', title: '期限なし', description: '', status: 'todo', dueDate: null },
+          { id: '2', title: '来月', description: '', status: 'todo', dueDate: '2026-12-01' },
+          { id: '3', title: '来週', description: '', status: 'todo', dueDate: '2026-11-18' },
+        ]}
+      />,
+    )
+
+    const titles = within(column('Todo'))
+      .getAllByRole('heading', { level: 3 })
+      .map((heading) => heading.textContent)
+    expect(titles).toEqual(['来週', '来月', '期限なし'])
+  })
+
+  test('期限付きで追加したタスクは期限の順の位置に表示される', async () => {
+    const user = userEvent.setup()
+    vi.mocked(createTask).mockResolvedValue({
+      ok: true,
+      data: { id: '3', title: '掃除', description: '', status: 'todo', dueDate: '2026-11-15' },
+    })
+    render(
+      <TaskBoard
+        initialTasks={[
+          { id: '1', title: '期限なし', description: '', status: 'todo', dueDate: null },
+          { id: '2', title: '来月', description: '', status: 'todo', dueDate: '2026-12-01' },
+        ]}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('タイトル'), '掃除')
+    await user.type(screen.getByLabelText('期限'), '2026-11-15')
+    await user.click(screen.getByRole('button', { name: '追加' }))
+
+    await waitFor(() => {
+      const titles = within(column('Todo'))
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent)
+      expect(titles).toEqual(['掃除', '来月', '期限なし'])
+    })
+  })
+
   test('タスクが0件なら全ての列が空表示になる', () => {
     render(<TaskBoard initialTasks={[]} />)
 

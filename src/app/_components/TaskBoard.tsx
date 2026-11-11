@@ -18,6 +18,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { sortByDueDate } from '@/lib/tasks/dueDate'
 import {
   TASK_STATUSES,
   type ActionResult,
@@ -159,7 +160,9 @@ export function TaskBoard({ initialTasks }: TaskBoardProps) {
 
       <div className="grid items-start gap-4 md:grid-cols-3">
         {TASK_STATUSES.map((status) => {
-          const columnTasks = optimisticTasks.filter((task) => task.status === status.value)
+          const columnTasks = sortByDueDate(
+            optimisticTasks.filter((task) => task.status === status.value),
+          )
           const headingId = `column-${status.value}`
           return (
             <section
